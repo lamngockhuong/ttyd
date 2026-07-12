@@ -1,15 +1,21 @@
-![backend](https://github.com/tsl0922/ttyd/workflows/backend/badge.svg)
-![frontend](https://github.com/tsl0922/ttyd/workflows/frontend/badge.svg)
-[![GitHub Releases](https://img.shields.io/github/downloads/tsl0922/ttyd/total)](https://github.com/tsl0922/ttyd/releases)
-[![Docker Pulls](https://img.shields.io/docker/pulls/tsl0922/ttyd)](https://hub.docker.com/r/tsl0922/ttyd)
-[![Packaging status](https://repology.org/badge/tiny-repos/ttyd.svg)](https://repology.org/project/ttyd/versions)
-![GitHub](https://img.shields.io/github/license/tsl0922/ttyd)
+![backend](https://github.com/lamngockhuong/ttyd/actions/workflows/backend.yml/badge.svg)
+![frontend](https://github.com/lamngockhuong/ttyd/actions/workflows/frontend.yml/badge.svg)
+[![GitHub Releases](https://img.shields.io/github/downloads/lamngockhuong/ttyd/total)](https://github.com/lamngockhuong/ttyd/releases)
+![GitHub](https://img.shields.io/github/license/lamngockhuong/ttyd)
 
 # ttyd - Share your terminal over the web
 
 ttyd is a simple command-line tool for sharing terminal over the web.
 
-![screenshot](https://github.com/tsl0922/ttyd/raw/main/screenshot.gif)
+![screenshot](https://github.com/lamngockhuong/ttyd/raw/main/screenshot.gif)
+
+> [!NOTE]
+> **This is a maintained fork of [`tsl0922/ttyd`](https://github.com/tsl0922/ttyd).**
+> The original project is no longer actively maintained and has open, unfixed bugs.
+> This fork continues development and bug fixes. Issues and pull requests are welcome
+> at [`lamngockhuong/ttyd`](https://github.com/lamngockhuong/ttyd).
+> All credit for the original work goes to [Shuanglei Tao](https://github.com/tsl0922)
+> and the upstream contributors.
 
 # Features
 
@@ -24,6 +30,14 @@ ttyd is a simple command-line tool for sharing terminal over the web.
 
 # Installation
 
+> [!IMPORTANT]
+> The package managers below (Homebrew, apt, WinGet, Scoop, …) install the **upstream**
+> `tsl0922/ttyd` build. This fork's releases are tagged `<upstream-version>-fork.N`
+> (e.g. `1.7.7-fork.1`) and exist mainly to ship a **working Windows binary** — the
+> upstream Windows release is currently broken. Get them from this fork's
+> [releases](https://github.com/lamngockhuong/ttyd/releases) page or
+> [build from source](#build-from-source).
+
 ## Install on macOS
 
 - Install with [Homebrew](http://brew.sh): `brew install ttyd`
@@ -36,14 +50,39 @@ ttyd is a simple command-line tool for sharing terminal over the web.
 - Install on OpenWrt: `opkg install ttyd`
 - Install on Gentoo: clone the [repo](https://bitbucket.org/mgpagano/ttyd/src/master) and follow the directions [here](https://wiki.gentoo.org/wiki/Custom_repository#Creating_a_local_repository).
 - Install with [Homebrew](https://docs.brew.sh/Homebrew-on-Linux) : `brew install ttyd`
-- Precompiled static binaries: download from the [releases](https://github.com/tsl0922/ttyd/releases) page
+- Precompiled static binaries: download from the [releases](https://github.com/lamngockhuong/ttyd/releases) page
 
 ## Install on Windows
 
-- Binary version (recommended): download from the [releases](https://github.com/tsl0922/ttyd/releases) page
-- Install with [WinGet](https://github.com/microsoft/winget-cli): `winget install tsl0922.ttyd`
-- Install with [Scoop](https://scoop.sh/#/apps?q=ttyd&s=2&d=1&o=true): `scoop install ttyd`
-- [Compile on Windows](https://github.com/tsl0922/ttyd/wiki/Compile-on-Windows)
+The upstream Windows binary is broken; this fork publishes a working one. Download it
+from this fork's [releases](https://github.com/lamngockhuong/ttyd/releases) (tagged like
+`1.7.7-fork.1`) and verify it against `SHA256SUMS` in the same release:
+
+- **`ttyd.msvc.exe`** — 64-bit build, native MSVC (recommended)
+- **`ttyd.win32.exe`** — 32-bit build
+
+Package managers install the upstream build instead:
+
+- [WinGet](https://github.com/microsoft/winget-cli): `winget install tsl0922.ttyd` (upstream)
+- [Scoop](https://scoop.sh/#/apps?q=ttyd&s=2&d=1&o=true): `scoop install ttyd` (upstream)
+
+Or [build from source](#build-from-source) / [compile with MSVC](https://github.com/tsl0922/ttyd/wiki/Compile-on-Windows).
+
+## Build from source
+
+Dependencies: `libwebsockets` (≥ 3.2.0, built with libuv support), `libuv`, `json-c`,
+`zlib`, and optionally `OpenSSL` / `Mbed TLS` for SSL.
+
+```bash
+git clone https://github.com/lamngockhuong/ttyd.git
+cd ttyd
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+./build/ttyd bash
+```
+
+See [`CLAUDE.md`](CLAUDE.md) for the full build matrix (MSVC/vcpkg, cross-compilation)
+and frontend build instructions.
 
 # Usage
 
