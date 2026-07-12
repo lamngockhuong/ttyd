@@ -23,6 +23,7 @@ jobs:
       VCPKG_EXE: ${{ github.workspace }}/vcpkg/vcpkg.exe
       VCPKG_TRIPLET: x64-windows-static
       TOOLCHAIN_FILE: ${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bincache
     steps:
       - uses: actions/checkout@v6
       - name: Checkout vcpkg
@@ -30,6 +31,16 @@ jobs:
         with:
           repository: microsoft/vcpkg
           path: vcpkg
+      # Cache vcpkg-built binary packages so `vcpkg install` restores prebuilt
+      # artifacts instead of recompiling libwebsockets/openssl/etc. every run.
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/vcpkg-bincache
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('.github/workflows/backend.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('.github/workflows/backend.yml') }}-
+            vcpkg-${{ env.VCPKG_TRIPLET }}-
       - name: Bootstrap vcpkg
         shell: pwsh
         run: ${{ github.workspace }}/vcpkg/bootstrap-vcpkg.bat
@@ -37,12 +48,13 @@ jobs:
         shell: pwsh
         run: |
           $env:VCPKG_ROOT = "${{ env.VCPKG_ROOT }}"
+          New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           ${{ env.VCPKG_EXE }} install --triplet ${{ env.VCPKG_TRIPLET }} libwebsockets libuv json-c zlib openssl getopt-win32
       - name: Build with MSVC
         shell: pwsh
         run: |
           $env:VCPKG_ROOT = "${{ env.VCPKG_ROOT }}"
-          cmake -S . -B build -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}" -DVCPKG_TARGET_TRIPLET=${{ env.VCPKG_TRIPLET }}
+          cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}" -DVCPKG_TARGET_TRIPLET=${{ env.VCPKG_TRIPLET }}
           cmake --build build --config Release
       - uses: actions/upload-artifact@v7
         with:
@@ -60,6 +72,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y autoconf automake build-essential cmake curl file libtool
+      # Cache the cross toolchain and the built dependency staging tree per
+      # target. Keyed on cross-build.sh so a change to versions/flags rebuilds.
+      - name: Cache cross toolchain and deps
+        uses: actions/cache@v6
+        with:
+          path: |
+            /opt/cross
+            /opt/stage
+          key: cross-${{ matrix.target }}-${{ hashFiles('scripts/cross-build.sh') }}
       - name: Cross build (${{ matrix.target }})
         env:
           BUILD_TARGET: ${{ matrix.target }}

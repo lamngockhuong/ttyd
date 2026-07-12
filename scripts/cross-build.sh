@@ -16,9 +16,12 @@ OPENSSL_VERSION="${OPENSSL_VERSION:-3.6.1}"
 LIBUV_VERSION="${LIBUV_VERSION:-1.52.1}"
 LIBWEBSOCKETS_VERSION="${LIBWEBSOCKETS_VERSION:-4.5.7}"
 
+# curl with retries to tolerate transient network/CDN failures (e.g. GitHub 5xx)
+CURL="curl -fsSL --retry 5 --retry-all-errors --retry-delay 3"
+
 build_zlib() {
     echo "=== Building zlib-${ZLIB_VERSION} (${TARGET})..."
-    curl -fSsLo- "https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
+    ${CURL} -o- "https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
     pushd "${BUILD_DIR}"/zlib-"${ZLIB_VERSION}"
         env CHOST="${TARGET}" ./configure --static --archs="-fPIC" --prefix="${STAGE_DIR}" --disable-crcvx
         make -j"$(nproc)" install
@@ -27,7 +30,7 @@ build_zlib() {
 
 build_json-c() {
     echo "=== Building json-c-${JSON_C_VERSION} (${TARGET})..."
-    curl -fSsLo- "https://s3.amazonaws.com/json-c_releases/releases/json-c-${JSON_C_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
+    ${CURL} -o- "https://s3.amazonaws.com/json-c_releases/releases/json-c-${JSON_C_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
     pushd "${BUILD_DIR}/json-c-${JSON_C_VERSION}"
         rm -rf build && mkdir -p build && cd build
         cmake -DCMAKE_TOOLCHAIN_FILE="${BUILD_DIR}/cross-${TARGET}.cmake" \
@@ -60,13 +63,13 @@ map_openssl_target() {
 build_openssl() {
     openssl_target=$(map_openssl_target "${BUILD_TARGET}")
     echo "=== Building openssl-${OPENSSL_VERSION} (${openssl_target})..."
-    curl -sLo- "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
+    ${CURL} -o- "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
     pushd "${BUILD_DIR}/openssl-${OPENSSL_VERSION}"
         openssl_cflags="-fPIC -latomic"
         case ${BUILD_TARGET} in
             s390x) openssl_cflags="${openssl_cflags} -march=z10" ;;
             win32)
-                curl -sLo- https://github.com/openssl/openssl/pull/29826.patch | patch -p1
+                ${CURL} -o- https://github.com/openssl/openssl/pull/29826.patch | patch -p1
                 ;;
         esac
         env CC=gcc CROSS_COMPILE="${TARGET}-" CFLAGS="${openssl_cflags}" \
@@ -77,7 +80,7 @@ build_openssl() {
 
 build_libuv() {
     echo "=== Building libuv-${LIBUV_VERSION} (${TARGET})..."
-    curl -fSsLo- "https://dist.libuv.org/dist/v${LIBUV_VERSION}/libuv-v${LIBUV_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
+    ${CURL} -o- "https://dist.libuv.org/dist/v${LIBUV_VERSION}/libuv-v${LIBUV_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
     pushd "${BUILD_DIR}/libuv-v${LIBUV_VERSION}"
         ./autogen.sh
         env CFLAGS=-fPIC ./configure --disable-shared --enable-static --prefix="${STAGE_DIR}" --host="${TARGET}"
@@ -103,7 +106,7 @@ EOF
 
 build_libwebsockets() {
     echo "=== Building libwebsockets-${LIBWEBSOCKETS_VERSION} (${TARGET})..."
-    curl -fSsLo- "https://github.com/warmcat/libwebsockets/archive/v${LIBWEBSOCKETS_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
+    ${CURL} -o- "https://github.com/warmcat/libwebsockets/archive/v${LIBWEBSOCKETS_VERSION}.tar.gz" | tar xz -C "${BUILD_DIR}"
     pushd "${BUILD_DIR}/libwebsockets-${LIBWEBSOCKETS_VERSION}"
         sed -i 's/ websockets_shared//g' cmake/libwebsockets-config.cmake.in
         rm -rf build && mkdir -p build && cd build
@@ -169,24 +172,37 @@ build() {
         SYSTEM="Windows"
     fi
 
-    echo "=== Installing toolchain ${ALIAS} (${TARGET})..."
-
     mkdir -p "${CROSS_ROOT}" && export PATH="${PATH}:${CROSS_ROOT}/bin"
-    curl -fSsLo- "${MUSL_CC_URL}/${TARGET}-cross.tgz" | tar xz -C "${CROSS_ROOT}" --strip-components=${COMPONENTS}
+    if [ -x "${CROSS_ROOT}/bin/${TARGET}-gcc" ]; then
+        echo "=== Toolchain ${ALIAS} (${TARGET}) restored from cache, skipping download"
+    else
+        echo "=== Installing toolchain ${ALIAS} (${TARGET})..."
+        ${CURL} -o- "${MUSL_CC_URL}/${TARGET}-cross.tgz" | tar xz -C "${CROSS_ROOT}" --strip-components=${COMPONENTS}
+    fi
 
     echo "=== Building target ${ALIAS} (${TARGET})..."
 
-    rm -rf "${STAGE_DIR}" "${BUILD_DIR}"
+    # Keep STAGE_DIR (dependency install prefix) across runs so it can be cached;
+    # only the ttyd build tree is disposable.
+    rm -rf "${BUILD_DIR}"
     mkdir -p "${STAGE_DIR}" "${BUILD_DIR}"
     export PKG_CONFIG_PATH="${STAGE_DIR}/lib/pkgconfig"
 
     install_cmake_cross_file ${SYSTEM}
 
-    build_zlib
-    build_json-c
-    build_libuv
-    build_openssl
-    build_libwebsockets
+    # .deps-built is written only after every dependency built successfully, so a
+    # partial/failed staging tree is never treated as a cache hit.
+    if [ -f "${STAGE_DIR}/.deps-built" ]; then
+        echo "=== Dependencies for ${TARGET} restored from cache, skipping build"
+    else
+        build_zlib
+        build_json-c
+        build_libuv
+        build_openssl
+        build_libwebsockets
+        touch "${STAGE_DIR}/.deps-built"
+    fi
+
     build_ttyd
 }
 
