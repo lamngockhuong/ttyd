@@ -1,9 +1,9 @@
 name: docker
 
+# Docker images are consumed from upstream (tsl0922/ttyd); this fork does not
+# publish them. Kept as manual-only so it never auto-runs (and fails) on push.
 on:
-  push:
-    branches: main
-    tags: ["*"]
+  workflow_dispatch:
 
 jobs:
   build:

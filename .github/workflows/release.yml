@@ -3,6 +3,11 @@ name: release
 on:
   push:
     tags: ["*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. 1.7.7 or 1.7.7-fork1)"
+        required: true
 
 jobs:
   build:
@@ -10,9 +15,14 @@ jobs:
   publish:
     needs: [build]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
+      # The tag/version match only applies to tag-triggered releases; a manual
+      # run publishes under the tag given as input.
       - name: Check version bump
+        if: github.event_name != 'workflow_dispatch'
         run: |
           TAG=$(git describe --tags --match "[0-9]*.[0-9]*.[0-9]*" --abbrev=8)
           VERSION=$(grep project CMakeLists.txt| awk '{print $3}')
@@ -36,3 +46,5 @@ jobs:
           artifacts: build/*
           allowUpdates: true
           draft: true
+          tag: ${{ inputs.tag || github.ref_name }}
+          commit: ${{ github.sha }}
